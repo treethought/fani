@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/treethought/fani"
 )
@@ -21,9 +23,13 @@ var deployCmd = &cobra.Command{
 
 		p := fani.NewFanPeer()
 		p.Bootstrap()
+		p.StartMdns()
 
 		p.Deploy(wasm, name)
 
+		fmt.Println("sitting idle to provide deployed dag")
+		fmt.Println("press ctrl-c to quit")
+		select {}
 	},
 }
 

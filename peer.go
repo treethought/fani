@@ -10,10 +10,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	ipfslite "github.com/hsanjuan/ipfs-lite"
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/suborbital/sat/sat"
 )
@@ -21,9 +25,10 @@ import (
 type FanPeer struct {
 	ctx  context.Context
 	ipfs *ipfslite.Peer
+	p2p  host.Host
 }
 
-func initIpfs(ctx context.Context) *ipfslite.Peer {
+func initIpfs(ctx context.Context) (*ipfslite.Peer, host.Host) {
 	ds := ipfslite.NewInMemoryDatastore()
 
 	prvKey, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
@@ -48,13 +53,32 @@ func initIpfs(ctx context.Context) *ipfslite.Peer {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return lite
+	return lite, h
 }
 
 func NewFanPeer() FanPeer {
 	ctx := context.TODO()
-	lite := initIpfs(ctx)
-	return FanPeer{ipfs: lite}
+	lite, h := initIpfs(ctx)
+	return FanPeer{ipfs: lite, p2p: h}
+}
+
+func (p FanPeer) HandlePeerFound(pi peer.AddrInfo) {
+	if pi.ID == p.p2p.ID() {
+		return
+	}
+	fmt.Println("discovered new peer:", pi.ID.Pretty())
+	p.p2p.Peerstore().AddAddr(pi.ID, pi.Addrs[0], time.Hour*1)
+
+	err := p.p2p.Connect(context.Background(), pi)
+	if err != nil {
+		fmt.Printf("error connecting to peer %s: %s\n", pi.ID.Pretty(), err)
+	}
+}
+
+func (p FanPeer) StartMdns() error {
+	fmt.Println("starting mdns")
+	msvc := mdns.NewMdnsService(p.p2p, "roc", p)
+	return msvc.Start()
 }
 
 func (e FanPeer) Bootstrap() {

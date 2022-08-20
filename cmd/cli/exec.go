@@ -23,6 +23,7 @@ var execCmd = &cobra.Command{
 		}
 
 		p.Bootstrap()
+		p.StartMdns()
 		p.Execute(c)
 	},
 }
