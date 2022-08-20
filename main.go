@@ -1,38 +1,39 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 
+	ipfslite "github.com/hsanjuan/ipfs-lite"
 	"github.com/ipfs/go-cid"
 )
 
 const sample = "Qmf9PXdLwdkEdqzmDbCtBCGoxCp6vNPXCr1XQ9fMXxYprs"
 
-func addSample(h Host) cid.Cid {
+func addSample(ex Executor) cid.Cid {
 	f, err := os.Open("./helloworld.wasm")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	wasmRawCID, err := h.sh.Add(f)
-	f.Close()
+	bcNode, err := ex.ipfs.AddFile(context.TODO(), f, &ipfslite.AddParams{})
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("added bytecode", wasmRawCID)
 
-	wasmCID, err := cid.Parse(wasmRawCID)
-	if err != nil {
-		log.Fatal(err)
-	}
+	fmt.Println("added bytecode", bcNode.Cid().String())
 
 	abi := &FnABI{
 		ID:       "helloworld",
-		ByteCode: wasmCID,
+		ByteCode: bcNode.Cid(),
+		Args: []ArgType{
+			{Name: "toGreet"},
+		},
 	}
 
 	abiData, err := json.Marshal(abi)
@@ -40,31 +41,32 @@ func addSample(h Host) cid.Cid {
 		log.Fatal(err)
 	}
 
-	abiRawCID, err := h.sh.DagPut(abiData, "json", "cbor")
-	f.Close()
+	abiNode, err := ex.ipfs.AddFile(context.TODO(), bytes.NewReader(abiData), &ipfslite.AddParams{})
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("added abi", abiRawCID)
+	fmt.Println("added abi", abiNode.Cid().String())
 
-	abiCID, err := cid.Parse(abiRawCID)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return abiCID
+	return abiNode.Cid()
 }
 
 func main() {
 	noSeed := flag.Bool("no-seed", false, "--no-seed")
 
-	h := NewHost()
+	ex := NewExecutor()
 
 	if !*noSeed {
-		sampleCID := addSample(h)
+		sampleCID := addSample(ex)
 		fmt.Println("helloworld sample deployed to:", sampleCID.String())
-		h.ExecuteCID(sampleCID)
+		fmt.Println()
 
+		// argCidRaw, err := h.sh.Add(bytes.NewReader([]byte("jimmy")))
+		// f.Close()
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		// fmt.Println("added arg", argCidRaw)
+		ex.Execute(sampleCID)
 	}
 
 }
