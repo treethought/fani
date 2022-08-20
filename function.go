@@ -1,4 +1,4 @@
-package main
+package fani
 
 import (
 	"github.com/ipfs/go-cid"

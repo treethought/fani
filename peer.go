@@ -1,6 +1,7 @@
-package main
+package fani
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,15 +18,12 @@ import (
 	"github.com/suborbital/sat/sat"
 )
 
-type Executor struct {
+type FanPeer struct {
 	ctx  context.Context
 	ipfs *ipfslite.Peer
 }
 
-func NewExecutor() Executor {
-
-	ctx := context.TODO()
-
+func initIpfs(ctx context.Context) *ipfslite.Peer {
 	ds := ipfslite.NewInMemoryDatastore()
 
 	prvKey, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
@@ -50,12 +48,20 @@ func NewExecutor() Executor {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	return Executor{ipfs: lite}
-
+	return lite
 }
 
-func (e Executor) ResolveABI(c cid.Cid) (FnABI, error) {
+func NewFanPeer() FanPeer {
+	ctx := context.TODO()
+	lite := initIpfs(ctx)
+	return FanPeer{ipfs: lite}
+}
+
+func (e FanPeer) Bootstrap() {
+	e.ipfs.Bootstrap(ipfslite.DefaultBootstrapPeers())
+}
+
+func (e FanPeer) resolveABI(c cid.Cid) (FnABI, error) {
 
 	fmt.Println("resolving ABI: ", c.String())
 	r, err := e.ipfs.GetFile(context.TODO(), c)
@@ -78,7 +84,7 @@ func (e Executor) ResolveABI(c cid.Cid) (FnABI, error) {
 
 }
 
-func (e Executor) getByteCode(abi FnABI) (string, error) {
+func (e FanPeer) getByteCode(abi FnABI) (string, error) {
 	fmt.Println("getting bytecode")
 	r, err := e.ipfs.GetFile(context.TODO(), abi.ByteCode)
 	if err != nil {
@@ -99,13 +105,13 @@ func (e Executor) getByteCode(abi FnABI) (string, error) {
 
 }
 
-func (e Executor) Execute(c cid.Cid) {
-	abi, err := e.ResolveABI(c)
+func (p FanPeer) Execute(c cid.Cid) {
+	abi, err := p.resolveABI(c)
 	if err != nil {
 		fmt.Println("failed to get fn ABI CID: ", err)
 		log.Fatal(err)
 	}
-	bpath, err := e.getByteCode(abi)
+	bpath, err := p.getByteCode(abi)
 	if err != nil {
 		log.Fatal("failed to get bytecode")
 	}
@@ -140,4 +146,35 @@ func execStat(s *sat.Sat, args []ArgType) {
 
 	fmt.Printf("%s\n", resp.Output)
 
+}
+
+func (p FanPeer) Deploy(path string, id string) cid.Cid {
+	f, err := os.Open(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	bcNode, err := p.ipfs.AddFile(context.TODO(), f, &ipfslite.AddParams{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("added bytecode", bcNode.Cid().String())
+
+	abi := &FnABI{
+		ID:       id,
+		ByteCode: bcNode.Cid(),
+	}
+
+	abiData, err := json.Marshal(abi)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	abiNode, err := p.ipfs.AddFile(context.TODO(), bytes.NewReader(abiData), &ipfslite.AddParams{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("added abi", abiNode.Cid().String())
+
+	return abiNode.Cid()
 }
