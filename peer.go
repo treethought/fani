@@ -129,8 +129,42 @@ func (e FanPeer) getByteCode(abi FnABI) (string, error) {
 
 }
 
-func (p FanPeer) Execute(c cid.Cid) {
-	abi, err := p.resolveABI(c)
+func (p FanPeer) Add(content interface{}) cid.Cid {
+	data, err := json.Marshal(content)
+	if err != nil {
+		log.Fatal(err)
+	}
+	r := bytes.NewReader(data)
+
+	n, err := p.ipfs.AddFile(context.TODO(), r, &ipfslite.AddParams{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return n.Cid()
+}
+
+
+func (p FanPeer) getCids(cids ...cid.Cid) [][]byte {
+	result := [][]byte{}
+
+	for _, ac := range cids {
+		r, err := p.ipfs.GetFile(context.TODO(), ac)
+		if err != nil {
+			log.Fatal(err)
+		}
+		content, err := ioutil.ReadAll(r)
+		if err != nil {
+			log.Fatal(err)
+		}
+		result = append(result, content)
+
+	}
+	return result
+
+}
+
+func (p FanPeer) Call(fcid cid.Cid, args ...cid.Cid) cid.Cid {
+	abi, err := p.resolveABI(fcid)
 	if err != nil {
 		fmt.Println("failed to get fn ABI CID: ", err)
 		log.Fatal(err)
@@ -140,10 +174,19 @@ func (p FanPeer) Execute(c cid.Cid) {
 		log.Fatal("failed to get bytecode")
 	}
 
-	ssat := createSat(bpath)
+	argsContent := p.getCids(args...)
+	result := p.execute(bpath, argsContent)
+	fmt.Printf("result:\n%s", result)
+	resultCID := p.Add(result)
+	fmt.Println("added result to network: ", resultCID.String())
+	return resultCID
+}
+
+func (p FanPeer) execute(bytecodePath string, args [][]byte) []byte {
+	ssat := createSat(bytecodePath)
 	// defer ssat.Shutdown(context.TODO(), syscall.SIGKILL)
 
-	execStat(ssat, abi.Args)
+	return execStat(ssat, args)
 }
 
 func createSat(bcPath string) *sat.Sat {
@@ -160,15 +203,18 @@ func createSat(bcPath string) *sat.Sat {
 	return s
 }
 
-func execStat(s *sat.Sat, args []ArgType) {
-	// TODO: args
-
-	resp, err := s.Exec([]byte{})
+func execStat(s *sat.Sat, args [][]byte) []byte {
+	// TODO: currently only support 1 arg
+	// to align with suborbital
+	input := []byte{}
+	if len(args) > 0 {
+		input = args[0]
+	}
+	resp, err := s.Exec(input)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	fmt.Printf("%s\n", resp.Output)
+	return resp.Output
 
 }
 

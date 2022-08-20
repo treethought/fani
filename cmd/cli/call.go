@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/ipfs/go-cid"
@@ -8,12 +9,12 @@ import (
 	"github.com/treethought/fani"
 )
 
-// execCmd represents the exec command
-var execCmd = &cobra.Command{
-	Use:   "exec",
+// callCmd represents the exec command
+var callCmd = &cobra.Command{
+	Use:   "call",
 	Short: "Execute a CID locally",
 	Long:  "Execute resolves a CID, retrieves all DAGs required for computation, and executes the function locally.",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		p := fani.NewFanPeer()
 
@@ -22,12 +23,22 @@ var execCmd = &cobra.Command{
 			log.Fatalf("%s is not a valid CID", args[0])
 		}
 
+		argCids := []cid.Cid{}
+		if len(args) > 1 {
+			for _, a := range args[1:] {
+				argCids = append(argCids, p.Add(a))
+			}
+		}
+
 		p.Bootstrap()
 		p.StartMdns()
-		p.Execute(c)
+		result := p.Call(c, argCids...)
+		fmt.Println("result added to network: ", result.String())
+
+		select {}
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(execCmd)
+	rootCmd.AddCommand(callCmd)
 }

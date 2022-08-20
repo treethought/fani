@@ -7,7 +7,6 @@ import (
 type ArgType struct {
 	Name  string
 	Codec cid.Cid
-	Data  cid.Cid
 }
 
 type FnABI struct {
