@@ -129,12 +129,7 @@ func (e FanPeer) getByteCode(abi FnABI) (string, error) {
 
 }
 
-func (p FanPeer) Add(content interface{}) cid.Cid {
-	data, err := json.Marshal(content)
-	if err != nil {
-		log.Fatal(err)
-	}
-	r := bytes.NewReader(data)
+func (p FanPeer) Add(r io.Reader) cid.Cid {
 
 	n, err := p.ipfs.AddFile(context.TODO(), r, &ipfslite.AddParams{})
 	if err != nil {
@@ -142,7 +137,6 @@ func (p FanPeer) Add(content interface{}) cid.Cid {
 	}
 	return n.Cid()
 }
-
 
 func (p FanPeer) getCids(cids ...cid.Cid) [][]byte {
 	result := [][]byte{}
@@ -176,9 +170,11 @@ func (p FanPeer) Call(fcid cid.Cid, args ...cid.Cid) cid.Cid {
 
 	argsContent := p.getCids(args...)
 	result := p.execute(bpath, argsContent)
-	fmt.Printf("result:\n%s", result)
-	resultCID := p.Add(result)
-	fmt.Println("added result to network: ", resultCID.String())
+	fmt.Printf("result:\n%s\n", result)
+
+	r := bytes.NewReader(result)
+	resultCID := p.Add(r)
+
 	return resultCID
 }
 

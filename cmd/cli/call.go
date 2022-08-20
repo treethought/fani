@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 
@@ -12,8 +13,8 @@ import (
 // callCmd represents the exec command
 var callCmd = &cobra.Command{
 	Use:   "call",
-	Short: "Execute a CID locally",
-	Long:  "Execute resolves a CID, retrieves all DAGs required for computation, and executes the function locally.",
+	Short: "Call a function CID",
+	Long:  "Call resolves a function CID, retrieves all ABI and args required for computation, and executes the function locally.",
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		p := fani.NewFanPeer()
@@ -26,7 +27,8 @@ var callCmd = &cobra.Command{
 		argCids := []cid.Cid{}
 		if len(args) > 1 {
 			for _, a := range args[1:] {
-				argCids = append(argCids, p.Add(a))
+				r := bytes.NewReader([]byte(a))
+				argCids = append(argCids, p.Add(r))
 			}
 		}
 
